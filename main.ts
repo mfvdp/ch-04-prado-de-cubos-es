@@ -520,7 +520,7 @@ function dibujarTitulo(lienzo: Image) {
     // depende de la longitud del nombre.
     if (!logoTitulo) {
         logoTitulo = image.create(160, 30)
-        cineDibujarLetras(logoTitulo, cineImagenTitulo, 2, cineEscalaTitulo(136), 100000, -10, true, -1)
+        cineDibujarLetras(logoTitulo, cineImagenTitulo, 2, cineEscalaTitulo(136), 100000, -10240, true, -1)
     }
     lienzo.drawTransparentImage(logoTitulo, 0, 13)
     // El Calliope Hacker en su escritorio, delante de una pared del color hacker.COLOR_PARED.

@@ -1,8 +1,11 @@
 // La intro con la tarjeta del estudio y el título.
 // Un viaje continuo de 22 segundos (CINE_DURACION_MS = 22000) a través de un pequeño decorado en 3D, construido solo
 // para la película. No cambia el mundo, no usa vídeo ni sprites y, mientras se muestra, no crea ninguna imagen nueva.
-// Secuencia: vuelo entre las islas, la puerta se carga, vuelo a través de la puerta (esta primera estación se llama
-// «vuelo»), después la tarjeta “Calliope Hacker presenta” sobre la isla de llegada y por último el título del juego.
+// Todos los cálculos usan números enteros: las posiciones en el mundo, el seno y el coseno en 1024avos, los puntos de
+// la pantalla en 16avos de píxel. El Calliope guarda cada número con decimales como un pequeño objeto en su memoria.
+// Con miles en cada imagen tenía que ordenar sin parar, y la intro se trababa. Secuencia: vuelo entre las islas, la
+// puerta se carga, vuelo a través de la puerta (esta primera estación se llama «vuelo»), después la tarjeta “Calliope
+// Hacker presenta” sobre la isla de llegada y por último el título del juego.
 let cineTerminado = false
 let cineMs = 0
 let cineCapitulo = 0
@@ -40,15 +43,15 @@ let cineCaras = [0, 2, 3, 1, 4, 5, 7, 6, 0, 1, 5, 4, 2, 6, 7, 3, 0, 4, 6, 2, 1, 
 let cineOrdenCaras = [0, 0, 0]
 let cineDistanciaCaras = [0, 0, 0]
 let cineCamaraX = 0
-let cineCamaraY = 3
+let cineCamaraY = 3072
 let cineCamaraZ = 0
 let cineSenGiro = 0
-let cineCosGiro = 1
+let cineCosGiro = 1024
 let cineSenInclinacion = 0
-let cineCosInclinacion = 1
+let cineCosInclinacion = 1024
 let cineSenAlabeo = 0
-let cineCosAlabeo = 1
-let cineFocal = 92
+let cineCosAlabeo = 1024
+let cineFocal = 1472
 let cinePantallaX = 0
 let cinePantallaY = 0
 let cineProfundidad = 0
@@ -56,12 +59,12 @@ let cineAtardecer = false
 
 function cineAnadirCaja(x: number, y: number, z: number,
     ancho: number, alto: number, fondo: number, clase: number) {
-    cineCajaX.push(x)
-    cineCajaY.push(y)
-    cineCajaZ.push(z)
-    cineCajaAncho.push(ancho)
-    cineCajaAlto.push(alto)
-    cineCajaFondo.push(fondo)
+    cineCajaX.push(Math.round(x * 1024))
+    cineCajaY.push(Math.round(y * 1024))
+    cineCajaZ.push(Math.round(z * 1024))
+    cineCajaAncho.push(Math.round(ancho * 512))
+    cineCajaAlto.push(Math.round(alto * 512))
+    cineCajaFondo.push(Math.round(fondo * 512))
     cineCajaClase.push(clase)
     cineOrdenCajas.push(0)
     cineDistanciaCajas.push(0)
@@ -93,8 +96,8 @@ function cinePreparar() {
     cineImagenTitulo = image.create(TITULO.length * 6, 8)
     cineImagenTitulo.print(TITULO, 0, 0, 1, image.font8)
     for (let i = 0; i <= 24; i++) {
-        cineAnilloX.push(Math.cos(i * Math.PI / 12))
-        cineAnilloY.push(Math.sin(i * Math.PI / 12))
+        cineAnilloX.push(Math.round(Math.cos(i * Math.PI / 12) * 1024))
+        cineAnilloY.push(Math.round(Math.sin(i * Math.PI / 12) * 1024))
     }
     for (let i = 0; i < 8; i++) {
         cineEsquinaX.push(0)
@@ -171,30 +174,30 @@ function cineSuavizar(valor: number): number {
 }
 
 function cineColocarCamara(x: number, y: number, z: number, giro: number, inclinacion: number, alabeo: number) {
-    cineCamaraX = x
-    cineCamaraY = y
-    cineCamaraZ = z
-    cineSenGiro = Math.sin(giro)
-    cineCosGiro = Math.cos(giro)
-    cineSenInclinacion = Math.sin(inclinacion)
-    cineCosInclinacion = Math.cos(inclinacion)
-    cineSenAlabeo = Math.sin(alabeo)
-    cineCosAlabeo = Math.cos(alabeo)
+    cineCamaraX = Math.round(x * 1024)
+    cineCamaraY = Math.round(y * 1024)
+    cineCamaraZ = Math.round(z * 1024)
+    cineSenGiro = Math.round(Math.sin(giro) * 1024)
+    cineCosGiro = Math.round(Math.cos(giro) * 1024)
+    cineSenInclinacion = Math.round(Math.sin(inclinacion) * 1024)
+    cineCosInclinacion = Math.round(Math.cos(inclinacion) * 1024)
+    cineSenAlabeo = Math.round(Math.sin(alabeo) * 1024)
+    cineCosAlabeo = Math.round(Math.cos(alabeo) * 1024)
 }
 
 function cineProyectar(x: number, y: number, z: number) {
     let dx = x - cineCamaraX
     let dy = y - cineCamaraY
     let dz = z - cineCamaraZ
-    let giradoX = dx * cineCosGiro - dz * cineSenGiro
-    let giradoZ = dz * cineCosGiro + dx * cineSenGiro
-    let giradoY = dy * cineCosInclinacion - giradoZ * cineSenInclinacion
-    cineProfundidad = giradoZ * cineCosInclinacion + dy * cineSenInclinacion
-    let escala = cineFocal / Math.max(0.5, cineProfundidad)
-    let planoX = giradoX * escala
-    let planoY = -giradoY * escala
-    cinePantallaX = 80 + planoX * cineCosAlabeo - planoY * cineSenAlabeo
-    cinePantallaY = 57 + planoY * cineCosAlabeo + planoX * cineSenAlabeo
+    let giradoX = (dx * cineCosGiro - dz * cineSenGiro) >> 10
+    let giradoZ = (dz * cineCosGiro + dx * cineSenGiro) >> 10
+    let giradoY = (dy * cineCosInclinacion - giradoZ * cineSenInclinacion) >> 10
+    cineProfundidad = (giradoZ * cineCosInclinacion + dy * cineSenInclinacion) >> 10
+    let escala = Math.max(512, cineProfundidad)
+    let planoX = Math.idiv(giradoX * cineFocal, escala)
+    let planoY = -Math.idiv(giradoY * cineFocal, escala)
+    cinePantallaX = 1280 + ((planoX * cineCosAlabeo - planoY * cineSenAlabeo) >> 10)
+    cinePantallaY = 912 + ((planoY * cineCosAlabeo + planoX * cineSenAlabeo) >> 10)
 }
 
 // MakeCode rellena él mismo los triángulos (fillTriangle), rápido y con enteros; lo que sobresale del borde de la
@@ -212,11 +215,11 @@ function cineRellenarCara(lienzo: Image, cara: number, tinta: number, colorBorde
     let esquinaB = cineCaras[primeraEsquina + 1]
     let esquinaC = cineCaras[primeraEsquina + 2]
     let esquinaD = cineCaras[primeraEsquina + 3]
-    cineRellenarTriangulo(lienzo,
+    lienzo.fillTriangle(
         cineEsquinaX[esquinaA], cineEsquinaY[esquinaA],
         cineEsquinaX[esquinaB], cineEsquinaY[esquinaB],
         cineEsquinaX[esquinaC], cineEsquinaY[esquinaC], tinta)
-    cineRellenarTriangulo(lienzo,
+    lienzo.fillTriangle(
         cineEsquinaX[esquinaA], cineEsquinaY[esquinaA],
         cineEsquinaX[esquinaC], cineEsquinaY[esquinaC],
         cineEsquinaX[esquinaD], cineEsquinaY[esquinaD], tinta)
@@ -243,29 +246,29 @@ function cineDibujarCaja(lienzo: Image, caja: number) {
     let y = cineCajaY[caja]
     let z = cineCajaZ[caja]
     let clase = cineCajaClase[caja]
-    let mitadAncho = cineCajaAncho[caja] * 0.5
-    let mitadAlto = cineCajaAlto[caja] * 0.5
-    let mitadFondo = cineCajaFondo[caja] * 0.5
+    let mitadAncho = cineCajaAncho[caja]
+    let mitadAlto = cineCajaAlto[caja]
+    let mitadFondo = cineCajaFondo[caja]
     let xMin = 10000
     let xMax = -10000
     let yMin = 10000
     let yMax = -10000
     for (let i = 0; i < 8; i++) {
-        let estrechamiento = clase == 1 && (i & 2) == 0 ? 0.58 : 1
-        cineProyectar(x + ((i & 1) == 0 ? -mitadAncho : mitadAncho) * estrechamiento,
+        let estrechamiento = clase == 1 && (i & 2) == 0 ? 594 : 1024
+        cineProyectar(x + ((((i & 1) == 0 ? -mitadAncho : mitadAncho) * estrechamiento) >> 10),
             y + ((i & 2) == 0 ? -mitadAlto : mitadAlto),
-            z + ((i & 4) == 0 ? -mitadFondo : mitadFondo) * estrechamiento)
+            z + ((((i & 4) == 0 ? -mitadFondo : mitadFondo) * estrechamiento) >> 10))
         // Si una esquina está demasiado cerca delante de la cámara (profundidad menor que 1,25) o detrás de ella, la
         // caja no se dibuja en absoluto. Todas las piezas grandes del decorado están a un lado de la trayectoria: no se
         // nota, y no aparece ninguna cara deformada.
-        if (cineProfundidad < 1.25) return
-        cineEsquinaX[i] = cinePantallaX
-        cineEsquinaY[i] = cinePantallaY
+        if (cineProfundidad < 1280) return
+        cineEsquinaX[i] = (cinePantallaX + 8) >> 4
+        cineEsquinaY[i] = (cinePantallaY + 8) >> 4
         cineEsquinaProfundidad[i] = cineProfundidad
-        xMin = Math.min(xMin, cinePantallaX)
-        xMax = Math.max(xMax, cinePantallaX)
-        yMin = Math.min(yMin, cinePantallaY)
-        yMax = Math.max(yMax, cinePantallaY)
+        xMin = Math.min(xMin, cineEsquinaX[i])
+        xMax = Math.max(xMax, cineEsquinaX[i])
+        yMin = Math.min(yMin, cineEsquinaY[i])
+        yMax = Math.max(yMax, cineEsquinaY[i])
     }
     if (xMax < 0 || xMin > 159 || yMax < 6 || yMin > 111) return
     // De cada caja solo se dibujan las tres caras que miran hacia la cámara.
@@ -321,7 +324,7 @@ function cineDibujarCaja(lienzo: Image, caja: number) {
         }
         // La profundidad sigue siendo visible: las islas y los árboles a más de 48 unidades por delante de la cámara se
         // dibujan con los colores apagados de la bruma.
-        if (z - cineCamaraZ > 48 && clase < 4) {
+        if (z - cineCamaraZ > 49152 && clase < 4) {
             tinta = esArriba ? (clase == 0 || clase == 3 ? 6 : 11) : 12
             colorBorde = tinta
         }
@@ -332,10 +335,10 @@ function cineDibujarCaja(lienzo: Image, caja: number) {
 function cineDibujarEscenario(lienzo: Image) {
     let cantidad = 0
     for (let i = 0; i < cineCajaX.length; i++) {
-        let avance = (cineCajaZ[i] - cineCamaraZ) * cineCosGiro +
-            (cineCajaX[i] - cineCamaraX) * cineSenGiro
-        let distancia = avance * cineCosInclinacion + (cineCajaY[i] - cineCamaraY) * cineSenInclinacion
-        if (distancia < 1 || distancia > 84) continue
+        let avance = ((cineCajaZ[i] - cineCamaraZ) * cineCosGiro +
+            (cineCajaX[i] - cineCamaraX) * cineSenGiro) >> 10
+        let distancia = (avance * cineCosInclinacion + (cineCajaY[i] - cineCamaraY) * cineSenInclinacion) >> 10
+        if (distancia < 1024 || distancia > 86016) continue
         // Las cajas se ordenan según su distancia, las más lejanas primero. Esto se hace en listas que ya existen: no
         // se crea ningún objeto nuevo.
         let j = cantidad - 1
@@ -351,14 +354,17 @@ function cineDibujarEscenario(lienzo: Image) {
     for (let i = 0; i < cantidad; i++) cineDibujarCaja(lienzo, cineOrdenCajas[i])
 }
 
+// El centro y los radios llegan en 16avos de píxel. Solo al dibujar se redondea a píxeles enteros: + 8, después
+// >> 4 (dividido entre 16).
 function cineRellenarElipse(lienzo: Image, x: number, y: number, radioX: number, radioY: number, tinta: number) {
     if (radioX <= 0 || radioY <= 0) return
     let anteriorX = x + radioX
     let anteriorY = y
     for (let i = 1; i <= 24; i++) {
-        let puntoX = x + cineAnilloX[i] * radioX
-        let puntoY = y + cineAnilloY[i] * radioY
-        cineRellenarTriangulo(lienzo, x, y, anteriorX, anteriorY, puntoX, puntoY, tinta)
+        let puntoX = x + ((cineAnilloX[i] * radioX) >> 10)
+        let puntoY = y + ((cineAnilloY[i] * radioY) >> 10)
+        lienzo.fillTriangle((x + 8) >> 4, (y + 8) >> 4, (anteriorX + 8) >> 4, (anteriorY + 8) >> 4,
+            (puntoX + 8) >> 4, (puntoY + 8) >> 4, tinta)
         anteriorX = puntoX
         anteriorY = puntoY
     }
@@ -366,7 +372,7 @@ function cineRellenarElipse(lienzo: Image, x: number, y: number, radioX: number,
 
 function cineDibujarCielo(lienzo: Image, atardecer: boolean, fuerzaPaso: number) {
     lienzo.fill(15)
-    let horizonte = Math.max(33, Math.min(85, 57 + cineSenInclinacion * 92))
+    let horizonte = Math.max(33, Math.min(85, 57 + ((cineSenInclinacion * 92) >> 10)))
     lienzo.fillRect(0, horizonte - 15, 160, 127 - horizonte, 8)
     lienzo.fillRect(0, horizonte + 9, 160, 111 - horizonte, 12)
     lienzo.fillRect(0, horizonte + 35, 160, 112 - (horizonte + 35), 15)
@@ -374,69 +380,80 @@ function cineDibujarCielo(lienzo: Image, atardecer: boolean, fuerzaPaso: number)
         lienzo.fillRect(0, horizonte - 6, 160, 29, 12)
         lienzo.fillRect(0, horizonte + 14, 160, 21, 11)
         // Un sol grande a contraluz, con bandas de luz en escalones.
-        let solX = 127 - cineCamaraX * 2
-        cineRellenarElipse(lienzo, solX, 52, 22, 22, 4)
-        cineRellenarElipse(lienzo, solX, 50, 17, 17, 5)
-        lienzo.fillRect(99 - cineCamaraX * 2, 59, 57, 2, 12)
-        lienzo.fillRect(103 - cineCamaraX * 2, 64, 49, 2, 12)
-        cineRellenarTriangulo(lienzo, solX - 6, 62, 5, 111, 27, 111, 8)
-        cineRellenarTriangulo(lienzo, solX - 2, 62, 47, 111, 57, 111, 12)
-        cineRellenarTriangulo(lienzo, solX + 6, 62, 137, 111, 159, 111, 8)
+        let solX = 2032 - (cineCamaraX >> 5)
+        cineRellenarElipse(lienzo, solX, 832, 352, 352, 4)
+        cineRellenarElipse(lienzo, solX, 800, 272, 272, 5)
+        solX = (solX + 8) >> 4
+        lienzo.fillRect(solX - 28, 59, 57, 2, 12)
+        lienzo.fillRect(solX - 24, 64, 49, 2, 12)
+        lienzo.fillTriangle(solX - 6, 62, 5, 111, 27, 111, 8)
+        lienzo.fillTriangle(solX - 2, 62, 47, 111, 57, 111, 12)
+        lienzo.fillTriangle(solX + 6, 62, 137, 111, 159, 111, 8)
     } else {
         // Unas bandas estrechas de cielo siguen a la cámara cuando gira.
         for (let i = 0; i < 5; i++) {
-            let x = 14 + i * 29 - cineSenGiro * 70
+            let x = 14 + i * 29 - ((cineSenGiro * 70) >> 10)
             lienzo.drawLine(x, 24 + i * 3, x + 29, 20 + i * 3, 8)
         }
     }
+    // Las estrellas cuentan en 16avos de píxel. desplazamiento (cuánto se han movido ya las estrellas) y estela (la
+    // longitud de los rayos de luz al volar a través de la puerta) se calculan una sola vez por imagen.
+    let desplazamiento = Math.round((cineMs * (0.006 + fuerzaPaso * 0.12)) % 128 * 16)
+    let estela = Math.round(fuerzaPaso * 307)
     for (let i = 0; i < 28; i++) {
-        let distancia = 30 + ((i * 37 + 128 - ((cineMs * (0.006 + fuerzaPaso * 0.12)) % 128)) % 128)
-        let x = 80 + ((i * 97 + 19) % 159 - 79) * 91 / distancia - cineSenGiro * 60
-        let y = 45 + ((i * 61 + 7) % 89 - 49) * 75 / distancia
-        if (x < 0 || x > 159 || y < 8 || y > (atardecer ? 30 : 100)) continue
-        if (fuerzaPaso > 0) lienzo.drawLine(x, y,
-            x - (x - 80) * fuerzaPaso * 0.3,
-            y - (y - 55) * fuerzaPaso * 0.3, 8)
-        lienzo.setPixel(x, y, i % 5 == 0 ? 5 : distancia < 62 ? 1 : 9)
+        let distancia = 480 + ((i * 592 + 2048 - desplazamiento) % 2048)
+        let x = 1280 + Math.idiv(((i * 97 + 19) % 159 - 79) * 23296, distancia) - ((cineSenGiro * 960) >> 10)
+        let y = 720 + Math.idiv(((i * 61 + 7) % 89 - 49) * 19200, distancia)
+        if (x < 0 || x > 2544 || y < 128 || y > (atardecer ? 480 : 1600)) continue
+        if (estela > 0) lienzo.drawLine(x >> 4, y >> 4,
+            (x - (((x - 1280) * estela) >> 10)) >> 4,
+            (y - (((y - 880) * estela) >> 10)) >> 4, 8)
+        lienzo.setPixel(x >> 4, y >> 4, i % 5 == 0 ? 5 : distancia < 992 ? 1 : 9)
     }
     // Unas nubes horizontales se mueven con el vuelo en 3D, en vez de quedarse como una imagen de fondo inmóvil.
     for (let i = 0; i < 4; i++) {
-        let z = 18 + ((i * 25 + 150 - cineCamaraZ) % 100)
-        let x = 80 + ((i % 2 == 0 ? -13 : 12) - cineCamaraX) * 92 / z
-        let y = 49 + (3 + i % 2) * 92 / z
-        let ancho = Math.min(55, 700 / z)
-        lienzo.fillRect(x - ancho / 2, y, ancho, Math.max(1, 35 / z), atardecer ? 13 : 11)
+        let z = 18432 + ((i * 25600 + 153600 - cineCamaraZ) % 102400)
+        let x = 1280 + Math.idiv(((i % 2 == 0 ? -13312 : 12288) - cineCamaraX) * 1472, z)
+        let y = 784 + Math.idiv((3 + i % 2) * 1507328, z)
+        let ancho = Math.min(880, Math.idiv(11468800, z))
+        lienzo.fillRect((x - (ancho >> 1)) >> 4, y >> 4, ancho >> 4, 1, atardecer ? 13 : 11)
     }
 }
 
 function cineDibujarPuerta(lienzo: Image, carga: number) {
-    if (cineCamaraZ > 50) return
-    cineProyectar(0, 1.15, 52.5)
-    if (cineProfundidad < 2) return
+    if (cineCamaraZ > 51200) return
+    cineProyectar(0, 1178, 53760)
+    if (cineProfundidad < 2048) return
+    // El centro y los radios de la puerta primero en 16avos de píxel; el giro y el tamaño de los anillos en 1024avos.
     let centroX = cinePantallaX
     let centroY = cinePantallaY
-    let escala = cineFocal / cineProfundidad
-    let mitadAncho = 3.25 * escala
-    let mitadAlto = 3.8 * escala
-    cineRellenarElipse(lienzo, centroX, centroY, mitadAncho + 2, mitadAlto + 2, carga > 0.55 ? 9 : 8)
+    let escala = cineFocal * 64 / cineProfundidad
+    let mitadAncho = Math.idiv(3328 * cineFocal, cineProfundidad)
+    let mitadAlto = Math.idiv(3891 * cineFocal, cineProfundidad)
+    cineRellenarElipse(lienzo, centroX, centroY, mitadAncho + 32, mitadAlto + 32, carga > 0.55 ? 9 : 8)
     cineRellenarElipse(lienzo, centroX, centroY, mitadAncho, mitadAlto, 15)
     let fase = cineMs * 0.0017
-    let coseno = Math.cos(fase)
-    let seno = Math.sin(fase)
+    let coseno = Math.round(Math.cos(fase) * 1024)
+    let seno = Math.round(Math.sin(fase) * 1024)
     for (let anillo = 0; anillo < 3; anillo++) {
-        let radio = ((cineMs * 0.00016 + anillo / 3) % 1)
-        let anteriorX = centroX + coseno * mitadAncho * radio
-        let anteriorY = centroY + seno * mitadAlto * radio
+        let radio = (Math.idiv(cineMs * 16384, 100000) + Math.idiv(anillo * 1024, 3)) & 1023
+        let anteriorX = centroX + ((((coseno * mitadAncho) >> 10) * radio) >> 10)
+        let anteriorY = centroY + ((((seno * mitadAlto) >> 10) * radio) >> 10)
         for (let i = 1; i <= 24; i++) {
-            let anilloX = cineAnilloX[i] * coseno - cineAnilloY[i] * seno
-            let anilloY = cineAnilloY[i] * coseno + cineAnilloX[i] * seno
-            let x = centroX + anilloX * mitadAncho * radio
-            let y = centroY + anilloY * mitadAlto * radio
-            lienzo.drawLine(anteriorX, anteriorY, x, y, anillo == 1 && carga > 0.5 ? 9 : 8)
+            let anilloX = (cineAnilloX[i] * coseno - cineAnilloY[i] * seno) >> 10
+            let anilloY = (cineAnilloY[i] * coseno + cineAnilloX[i] * seno) >> 10
+            let x = centroX + ((((anilloX * mitadAncho) >> 10) * radio) >> 10)
+            let y = centroY + ((((anilloY * mitadAlto) >> 10) * radio) >> 10)
+            lienzo.drawLine(anteriorX >> 4, anteriorY >> 4, x >> 4, y >> 4, anillo == 1 && carga > 0.5 ? 9 : 8)
             anteriorX = x
             anteriorY = y
         }
     }
+    // A partir de aquí quedan pocos cálculos por imagen: otra vez en píxeles enteros.
+    centroX = centroX / 16
+    centroY = centroY / 16
+    mitadAncho = mitadAncho / 16
+    mitadAlto = mitadAlto / 16
     if (carga > 0.02) {
         let anchoLuz = Math.max(1, carga * 4)
         lienzo.fillRect(centroX - anchoLuz - 2, 6, anchoLuz * 2 + 5, centroY + mitadAlto - 6, 8)
@@ -474,26 +491,30 @@ function cineDibujarPuerta(lienzo: Image, carga: number) {
 // misma curva prevista. Se dibuja en tres capas (contorno, sombra y color); las letras no tiemblan al azar.
 function cineDibujarLetras(lienzo: Image, mascara: Image, y: number, escala: number, aparicionMs: number,
     columnaBrillo: number, esDorado: boolean, sentidoEntrada: number) {
-    let inicioX = 80 - mascara.width * escala / 2
-    let escalaVertical = mascara == cineImagenTitulo ? escala * 1.22 : escala
+    // Números enteros en lugar de decimales: tamaño y altura en 1024avos. columnaBrillo ya llega en 1024avos.
+    escala = Math.round(escala * 1024)
+    y = Math.round(y * 1024)
+    let inicioX = 81920 - ((mascara.width * escala) >> 1)
+    let escalaVertical = mascara == cineImagenTitulo ? Math.idiv(escala * 122, 100) : escala
     let numLetras = Math.idiv(mascara.width + 5, 6)
     // La sombra crece con el tamaño; en los títulos pequeños, un desplazamiento fijo taparía los huecos de las letras.
-    let sombra = Math.min(3, Math.round(escala))
-    let contorno = Math.min(5, Math.round(escala * 1.75))
+    let sombra = Math.min(3, (escala + 512) >> 10)
+    let contorno = Math.min(5, (((escala * 7) >> 2) + 512) >> 10)
+    let ancho = Math.max(1, (escala + 1023) >> 10)
+    let alto = Math.max(1, (escalaVertical + 1023) >> 10)
     for (let capa = 0; capa < 3; capa++) {
         for (let letra = 0; letra < numLetras; letra++) {
-            let progreso = cineSuavizar((aparicionMs - letra * 85) / 650)
+            let progreso = Math.max(0, Math.min(1024, Math.idiv((aparicionMs - letra * 85) * 1024, 650)))
+            progreso = (((progreso * progreso) >> 10) * (3072 - 2 * progreso)) >> 10
             if (progreso <= 0) continue
-            let restante = 1 - progreso
-            let desplazamientoX = (letra - (numLetras - 1) / 2) * restante * 16
-            let desplazamientoY = restante * restante * 29 * sentidoEntrada
+            let restante = 1024 - progreso
+            let desplazamientoX = (2 * letra - numLetras + 1) * restante * 8
+            let desplazamientoY = ((restante * restante) >> 10) * 29 * sentidoEntrada
             for (let mascaraX = letra * 6; mascaraX < Math.min(mascara.width, letra * 6 + 6); mascaraX++) {
                 for (let mascaraY = 0; mascaraY < mascara.height; mascaraY++) {
                     if (!mascara.getPixel(mascaraX, mascaraY)) continue
-                    let x = Math.round(inicioX + mascaraX * escala + desplazamientoX)
-                    let pantallaY = Math.round(y + mascaraY * escalaVertical + desplazamientoY)
-                    let ancho = Math.max(1, Math.ceil(escala))
-                    let alto = Math.max(1, Math.ceil(escalaVertical))
+                    let x = (inicioX + mascaraX * escala + desplazamientoX + 512) >> 10
+                    let pantallaY = (y + mascaraY * escalaVertical + desplazamientoY + 512) >> 10
                     if (capa == 0) {
                         lienzo.fillRect(x - 1, pantallaY - 1, ancho + 2, alto + 2, 15)
                         lienzo.fillRect(x + 2, pantallaY + contorno, ancho + 1, alto + 1, 15)
@@ -502,7 +523,7 @@ function cineDibujarLetras(lienzo: Image, mascara: Image, y: number, escala: num
                         ancho, alto + 1, esDorado ? 4 : 8)
                     else {
                         let tinta = mascaraY < Math.idiv(mascara.height, 2) ? 1 : esDorado ? 5 : 9
-                        if (Math.abs(mascaraX - columnaBrillo) < 2) tinta = 1
+                        if (Math.abs(mascaraX * 1024 - columnaBrillo) < 2048) tinta = 1
                         lienzo.fillRect(x, pantallaY, ancho, alto, tinta)
                     }
                 }
@@ -511,16 +532,19 @@ function cineDibujarLetras(lienzo: Image, mascara: Image, y: number, escala: num
     }
 }
 
+// Los radios están en 16avos de píxel; aquí fuerza pasa a ser la longitud de la estela.
 function cineDibujarLineasVelocidad(lienzo: Image, fuerza: number) {
+    fuerza = Math.round((5 + fuerza * 22) * 16)
     for (let i = 0; i < 12; i++) {
         let numeroAnillo = i * 2
-        let progreso = ((cineMs * 0.0015 + i * 0.31) % 1)
-        let radio = 20 + progreso * 92
-        let x = 80 + cineAnilloX[numeroAnillo] * radio
-        let y = 55 + cineAnilloY[numeroAnillo] * radio * 0.7
-        let cola = radio - (5 + fuerza * 22)
-        lienzo.drawLine(x, y,
-            80 + cineAnilloX[numeroAnillo] * cola, 55 + cineAnilloY[numeroAnillo] * cola * 0.7,
+        let progreso = (Math.idiv(cineMs * 1536, 1000) + Math.idiv(i * 31744, 100)) & 1023
+        let radio = 320 + ((progreso * 1472) >> 10)
+        let x = 1280 + ((cineAnilloX[numeroAnillo] * radio) >> 10)
+        let y = 880 + Math.idiv(cineAnilloY[numeroAnillo] * radio * 7, 10240)
+        let cola = radio - fuerza
+        lienzo.drawLine(x >> 4, y >> 4,
+            (1280 + ((cineAnilloX[numeroAnillo] * cola) >> 10)) >> 4,
+            (880 + Math.idiv(cineAnilloY[numeroAnillo] * cola * 7, 10240)) >> 4,
             i % 3 == 0 ? 9 : 8)
     }
 }
@@ -534,7 +558,7 @@ function cineDibujarRotulo(lienzo: Image, texto: string, y: number, tinta: numbe
 
 function dibujarCine(lienzo: Image) {
     let tiempoMs = cineMs
-    cineFocal = 92
+    cineFocal = 1472
     cineAtardecer = tiempoMs >= CINE_ATARDECER_MS
     if (tiempoMs < CINE_CARGA_PUERTA_MS) {
         let progreso = tiempoMs / CINE_CARGA_PUERTA_MS
@@ -553,7 +577,7 @@ function dibujarCine(lienzo: Image) {
         let progreso = (tiempoMs - CINE_PASO_PUERTA_MS) / 4000
         // Acelerar a través de la puerta y después frenar antes de la isla de llegada.
         let progresoSuave = cineSuavizar(progreso)
-        cineFocal = 92 - Math.sin(progreso * Math.PI) * 16
+        cineFocal = Math.round((92 - Math.sin(progreso * Math.PI) * 16) * 16)
         cineColocarCamara(
             Math.sin(progreso * Math.PI * 2) * 0.8,
             2.4 + progresoSuave * 4,
@@ -588,12 +612,13 @@ function dibujarCine(lienzo: Image) {
     if (tiempoMs >= CINE_CARGA_PUERTA_MS && tiempoMs < CINE_PASO_PUERTA_MS) {
         let energia = cineSuavizar((tiempoMs - CINE_CARGA_PUERTA_MS) / 2400)
         // La energía atrae destellos visibles hacia la puerta antes de que se abra.
+        energia = 2 + energia * 2
         for (let i = 0; i < 8; i++) {
             let numeroAnillo = i * 3
-            let radio = 18 + ((i * 13 + 97 - ((tiempoMs - CINE_CARGA_PUERTA_MS) / 17) % 97) % 97)
-            let x = 80 + cineAnilloX[numeroAnillo] * radio
-            let y = 60 + cineAnilloY[numeroAnillo] * radio * 0.68
-            lienzo.fillRect(x, y, 2 + energia * 2, 2 + energia * 2, i % 3 == 0 ? 5 : 9)
+            let radio = 288 + ((i * 208 + 1552 - Math.idiv((tiempoMs - CINE_CARGA_PUERTA_MS) * 16, 17) % 1552) % 1552)
+            let x = 1280 + ((cineAnilloX[numeroAnillo] * radio) >> 10)
+            let y = 960 + Math.idiv(cineAnilloY[numeroAnillo] * radio * 17, 25600)
+            lienzo.fillRect(x >> 4, y >> 4, energia, energia, i % 3 == 0 ? 5 : 9)
         }
     }
     if (fuerzaPaso > 0.1) cineDibujarLineasVelocidad(lienzo, fuerzaPaso)
@@ -601,9 +626,9 @@ function dibujarCine(lienzo: Image) {
         let transcurridoMs = tiempoMs - CINE_TARJETA_MS
         // La tarjeta del estudio: CALLIOPE y HACKER en letras gigantes, y debajo “presenta”.
         cineDibujarLetras(lienzo, cineImagenCalliope, 19, 2.85,
-            transcurridoMs + 180, (transcurridoMs - 1400) / 50, true, -1)
+            transcurridoMs + 180, Math.idiv((transcurridoMs - 1400) * 1024, 50), true, -1)
         cineDibujarLetras(lienzo, cineImagenHacker, 55, 3.45,
-            transcurridoMs - 180, (transcurridoMs - 1700) / 48, false, 1)
+            transcurridoMs - 180, Math.idiv((transcurridoMs - 1700) * 1024, 48), false, 1)
         if (transcurridoMs > 1200) {
             let parteVisible = cineSuavizar((transcurridoMs - 1200) / 550)
             let y = 98 + Math.round((1 - parteVisible) * 6)
@@ -625,7 +650,7 @@ function dibujarCine(lienzo: Image) {
         let calma = 1 - cineSuavizar(transcurridoMs / 1000)
         // Una entrada tranquila y grande para el título: el vuelo de la cámara continúa por debajo.
         cineDibujarLetras(lienzo, cineImagenTitulo, 15 - calma * 7,
-            cineEscalaTitulo(148) + calma * 0.12, transcurridoMs + 120, (transcurridoMs - 1800) / 33, true, -1)
+            cineEscalaTitulo(148) + calma * 0.12, transcurridoMs + 120, Math.idiv((transcurridoMs - 1800) * 1024, 33), true, -1)
         if (transcurridoMs > 1600) cineDibujarRotulo(lienzo, "CREA TU PROPIO MUNDO", 51, 13)
         // Hojas y chispas en primer plano se mueven con el movimiento de la cámara.
         for (let i = 0; i < 8; i++) {
