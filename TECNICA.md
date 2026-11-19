@@ -18,7 +18,7 @@ Los archivos del juego:
 - `cine.ts`: La intro con la tarjeta del estudio y el título.
 - `sonido.ts`: Los sonidos del juego: cortos, fabricados por el programa, sin archivos de audio y sin reproducción que
   bloquee (todo suena en segundo plano).
-- `practica.ts`: La práctica en siete pasos en un terreno aparte.
+- `practica.ts`: La práctica en ocho pasos en un terreno aparte.
 - `hacker.ts`: Las imágenes del Calliope Hacker, en los colores de la paleta de este juego.
 - `main.ts`: Arranque, controles, mesa de trabajo y pantalla.
 

@@ -1,4 +1,4 @@
-// La práctica en siete pasos en un terreno aparte. Al final, la partida de verdad (mundo, bolsa y posición)
+// La práctica en ocho pasos en un terreno aparte. Al final, la partida de verdad (mundo, bolsa y posición)
 // vuelve como estaba.
 let practicaActiva = false
 let practicaPaso = 0
@@ -8,6 +8,9 @@ let copiaPartida: Buffer = null
 let practicaInicioZ = 0
 let practicaAlFinal = false
 let estabaSinGuardar = false
+// El paso 8 practica saltar y construir hacia arriba en un hoyo; el paso 9 es la tarjeta final.
+const PRACTICA_SALTO = 8
+const PRACTICA_FIN = 9
 let practicaTitulos = [
     "EMPIEZA TU AVENTURA",
     "01  MOVERSE",
@@ -17,6 +20,7 @@ let practicaTitulos = [
     "05  TU PRIMER BLOQUE",
     "06  CAMBIAR MATERIAL",
     "07  LA MESA DE TRABAJO",
+    "08  SAL DEL HOYO",
     "LISTO PARA TU MUNDO"
 ]
 let practicaLinea1 = [
@@ -28,10 +32,11 @@ let practicaLinea1 = [
     "Pulsa B brevemente.",
     "Mantén B + DERECHA.",
     "Abre MENU.",
+    "Toca A: saltas.",
     "Explora. Recoge. Crea."
 ]
 let practicaLinea2 = [
-    "Siete tareas pequeñas.",
+    "Ocho tareas pequeñas.",
     "Ve al bloque de prueba.",
     "Así puedes girar.",
     "Mueve la mirada.",
@@ -39,6 +44,7 @@ let practicaLinea2 = [
     "Ponlo ante la piedra.",
     "Elige un material.",
     "Fabrica un pico.",
+    "Luego B: bloque debajo.",
     "A: ¡a la aventura!"
 ]
 
@@ -111,7 +117,21 @@ function pasarPasoSiguiente() {
         jugadorY = 4 * UNIDAD
         velocidadCaida = 0
     }
-    if (practicaPaso == 8) {
+    if (practicaPaso == PRACTICA_SALTO) {
+        // Un hoyo de dos bloques de profundidad: andando no se sale, construyendo hacia arriba sí.
+        menuAbierto = false
+        escribirBloque(10, 1, 5, Bloque.Piedra)
+        escribirBloque(10, 2, 5, Bloque.Aire)
+        escribirBloque(10, 3, 5, Bloque.Aire)
+        jugadorX = 10 * UNIDAD + 128
+        jugadorZ = 5 * UNIDAD + 128
+        jugadorY = 2 * UNIDAD
+        velocidadCaida = 0
+        saltando = false
+        giro = 0
+        inclinacion = -0.16
+    }
+    if (practicaPaso == PRACTICA_FIN) {
         practicaAlFinal = true
         menuAbierto = false
     }
@@ -136,10 +156,13 @@ function actualizarPractica(duracionMs: number, sentidoGiro: number, sentidoMira
     } else if (practicaPaso == 3) {
         practicaProgreso += Math.abs(sentidoMirada) * duracionMs / 260
         if (practicaProgreso >= 1) pasarPasoSiguiente()
+    } else if (practicaPaso == PRACTICA_SALTO && jugadorY >= 4 * UNIDAD && hayChoque(jugadorX, jugadorY - 1, jugadorZ)) {
+        // Conseguido en cuanto el jugador vuelve a estar arriba, en el prado.
+        pasarPasoSiguiente()
     }
 }
 function dibujarPractica(lienzo: Image) {
-    if (practicaPaso == 0 || practicaPaso == 8) {
+    if (practicaPaso == 0 || practicaPaso == PRACTICA_FIN) {
         lienzo.fillRect(4, 30, 152, 61, 15)
         lienzo.drawRect(4, 30, 152, 61, 6)
         let titulo = practicaTitulos[practicaPaso]
@@ -160,13 +183,13 @@ function dibujarPractica(lienzo: Image) {
         lienzo.print(practicaTitulos[practicaPaso], 4, 84, 5, image.font8)
         lienzo.print(practicaLinea1[practicaPaso], 4, 94, 1, image.font8)
         lienzo.print(practicaLinea2[practicaPaso], 4, 103, 13, image.font8)
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < 8; i++) {
             lienzo.fillRect(114 + i * 6, 73, 4, 3,
                 i < practicaPaso - 1 ? 7 : i == practicaPaso - 1 ? 5 : 12)
         }
     }
     lienzo.fillRect(0, 0, 160, 8, 15)
-    lienzo.print("PRÁCTICA " + Math.min(7, practicaPaso) + "/7", 2, 1, 9, image.font8)
+    lienzo.print("PRÁCTICA " + Math.min(8, practicaPaso) + "/8", 2, 1, 9, image.font8)
     lienzo.print(practicaPaso == 7 ? "MENU" : "MENU: SALIR",
         practicaPaso == 7 ? 134 : 88, 1, 13, image.font8)
 }

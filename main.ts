@@ -9,6 +9,18 @@ const PANTALLA_QUIETA_MS = 500
 // Imagen en la pared de la mesa de trabajo: esquina superior izquierda de la imagen, con un píxel de marco alrededor.
 const PARED_X = 129
 const PARED_Y = 11
+// Pulsar A menos tiempo que esto es un salto. Extraer lo más rápido dura 220 milisegundos, así que un toque corto nunca
+// extrae nada. El tiempo se cuenta en tiempo de juego (como mucho 80 milisegundos por imagen), igual que al extraer: en
+// el aparato, las pulsaciones solo llegan entre dos imágenes, y con imágenes lentas el tiempo real entre ellas
+// sería demasiado largo.
+const SALTO_TOQUE_MS = 250
+// Un toque justo antes de aterrizar aún cuenta, aunque una imagen dure mucho en el aparato.
+const SALTO_ANTES_MS = 250
+// Si el jugador está tanto tiempo en un hoyo, un aviso arriba explica cómo salir. Se queda un rato y vuelve
+// tras una pausa.
+const AVISO_TRAS_MS = 4000
+const AVISO_DURA_MS = 5000
+const AVISO_REPITE_MS = 20000
 let tituloAbierto = true
 let tituloDesdeMs = 0
 let menuQuietoHastaMs = 0
@@ -48,6 +60,18 @@ let inclinacionDibujada = -2
 let anchoRayoDibujado = 0
 let imagenMundo = image.create(160, 120)
 let logoTitulo: Image = null
+let aMantenidoMs = 0
+// ¿El pulgar pulsó B antes de soltar A? Eso cuenta igual como «A, luego B».
+let bEncadenado = false
+let saltoListo = false
+let extraidoEnPulsacion = false
+let subidaPedida = false
+// Cuándo quiso saltar el jugador en el aire: si aterriza poco después, salta entonces.
+let deseoSaltoMs = -1000
+let enHoyoDesdeMs = -1
+let proximaRevisionHoyoMs = 0
+let avisoHoyoHastaMs = 0
+let proximoAvisoMs = 0
 
 function pedirImagenNueva() {
     versionEscena++
@@ -75,6 +99,8 @@ function iniciarJuego() {
     botonesBloqueados = true
     bUsado = true
     extraccionMs = 0
+    enHoyoDesdeMs = -1
+    avisoHoyoHastaMs = 0
     actualizarObjetivo()
     pedirImagenNueva()
     avisar(tienePico ? "¡Pico listo! ¡Adelante!" : "MENU: fabrica tu pico")
@@ -214,10 +240,22 @@ controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
         menuAbierto = false
         mundoNuevoPreguntado = false
         botonesBloqueados = true
+    } else {
+        // En el juego: una pulsación corta de A es un salto (al soltar), una larga extrae.
+        aMantenidoMs = 0
+        extraidoEnPulsacion = false
+        saltoListo = !botonesBloqueados && !controller.B.isPressed() &&
+            (!practicaActiva || (practicaPaso >= 1 && practicaPaso <= PRACTICA_SALTO))
     }
+})
+controller.A.onEvent(ControllerButtonEvent.Released, function () {
+    if (saltoListo && !extraidoEnPulsacion && aMantenidoMs < SALTO_TOQUE_MS && cineTerminado &&
+        !tituloAbierto && !menuAbierto && (!controller.B.isPressed() || bEncadenado) && !saltar()) deseoSaltoMs = game.runtime()
+    saltoListo = false
 })
 controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
     bUsado = !cineTerminado || tituloAbierto || menuAbierto || botonesBloqueados
+    bEncadenado = !bUsado && saltoListo && controller.A.isPressed()
     if (!cineTerminado) return
     if (tituloAbierto) {
         if (tituloListo()) iniciarPractica()
@@ -225,8 +263,13 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
     else if (menuAbierto) ejecutarFilaMenu()
 })
 controller.B.onEvent(ControllerButtonEvent.Released, function () {
-    if (cineTerminado && !tituloAbierto && !menuAbierto && !bUsado && !botonesBloqueados &&
-        (!practicaActiva || practicaPaso == 5)) {
+    // Durante un salto, B pone el bloque bajo los pies en cuanto el jugador está bastante alto.
+    let encadenado = bEncadenado
+    bEncadenado = false
+    if (cineTerminado && !tituloAbierto && !menuAbierto && (!bUsado || encadenado) && !botonesBloqueados && saltando &&
+        (!practicaActiva || practicaPaso == PRACTICA_SALTO)) subidaPedida = true
+    else if (cineTerminado && !tituloAbierto && !menuAbierto && !bUsado && !botonesBloqueados &&
+        (!practicaActiva || practicaPaso == 5 || practicaPaso == PRACTICA_SALTO)) {
         actualizarObjetivo()
         if (!hayObjetivo) avisar("Objetivo fuera de rango")
         else if (ponerBloque(lugarX, lugarY, lugarZ)) {
@@ -281,19 +324,20 @@ function actualizarJuego() {
         return
     }
     if (tituloAbierto || menuAbierto) return
-    if (practicaActiva && (practicaPaso == 0 || practicaPaso == 8)) {
+    if (practicaActiva && (practicaPaso == 0 || practicaPaso == PRACTICA_FIN)) {
         actualizarPractica(duracionMs, 0, 0)
         return
     }
+    if (controller.A.isPressed()) aMantenidoMs += duracionMs
     let avance = (controller.up.isPressed() ? 1 : 0) - (controller.down.isPressed() ? 1 : 0)
     let sentidoGiro = (controller.right.isPressed() ? 1 : 0) - (controller.left.isPressed() ? 1 : 0)
     let sentidoMirada = 0
-    if (practicaActiva && practicaPaso != 1 && practicaPaso != 3) avance = 0
-    if (practicaActiva && practicaPaso != 2 && practicaPaso != 6) sentidoGiro = 0
+    if (practicaActiva && practicaPaso != 1 && practicaPaso != 3 && practicaPaso != PRACTICA_SALTO) avance = 0
+    if (practicaActiva && practicaPaso != 2 && practicaPaso != 6 && practicaPaso != PRACTICA_SALTO) sentidoGiro = 0
     if (controller.B.isPressed()) {
         if (controller.up.isPressed() || controller.down.isPressed() || controller.left.isPressed() ||
             controller.right.isPressed() || controller.A.isPressed()) bUsado = true
-        if (avance != 0 && (!practicaActiva || practicaPaso == 3)) {
+        if (avance != 0 && (!practicaActiva || practicaPaso == 3 || practicaPaso == PRACTICA_SALTO)) {
             sentidoMirada = avance
             inclinacion = Math.max(-1.2, Math.min(1.2, inclinacion + avance * duracionMs * 0.0017))
             sinGuardar = true
@@ -313,9 +357,24 @@ function actualizarJuego() {
         faseAndar += duracionMs * 0.014
     }
     if (jugadorX != antesX || jugadorY != antesY || jugadorZ != antesZ || sentidoGiro != 0) sinGuardar = true
+    if (enSuelo && ahora - deseoSaltoMs <= SALTO_ANTES_MS) {
+        deseoSaltoMs = -1000
+        saltar()
+    }
+    if (subidaPedida) {
+        if (!saltando) subidaPedida = false
+        else if (jugadorY >= (alturaSalto + 1) * UNIDAD) {
+            subidaPedida = false
+            if (construirDebajo()) {
+                tocarSonido(1)
+                ultimoGolpeMs = ahora
+                pedirImagenNueva()
+            } else avisar("Sin sitio / material")
+        }
+    }
     actualizarObjetivo()
     if (!botonesBloqueados && controller.A.isPressed() && !controller.B.isPressed() && hayObjetivo &&
-        (!practicaActiva || practicaPaso == 4)) {
+        (!practicaActiva || practicaPaso == 4 || practicaPaso == PRACTICA_SALTO)) {
         if (extraccionX != objetivoX || extraccionY != objetivoY || extraccionZ != objetivoZ) extraccionMs = 0
         extraccionX = objetivoX
         extraccionY = objetivoY
@@ -324,6 +383,7 @@ function actualizarJuego() {
         let duracionExtraccionMs = bloqueObjetivo == Bloque.Piedra || bloqueObjetivo == Bloque.Cristal
             ? (tienePico ? 220 : 600) : 300
         if (extraccionMs >= duracionExtraccionMs) {
+            extraidoEnPulsacion = true
             let bloqueExtraido = bloqueObjetivo
             if (extraerBloque(objetivoX, objetivoY, objetivoZ)) {
                 ultimoGolpeMs = ahora
@@ -340,6 +400,20 @@ function actualizarJuego() {
         }
     } else extraccionMs = 0
     actualizarPractica(duracionMs, sentidoGiro, sentidoMirada)
+    // Dos veces por segundo: ¿está el jugador en un hoyo? Solo se comprueba de pie, no en la práctica.
+    if (!practicaActiva && ahora >= proximaRevisionHoyoMs && enSuelo) {
+        proximaRevisionHoyoMs = ahora + 500
+        if (contarEspacio() < HOYO_LIMITE) {
+            if (enHoyoDesdeMs < 0) enHoyoDesdeMs = ahora
+        } else {
+            enHoyoDesdeMs = -1
+            avisoHoyoHastaMs = 0
+        }
+    }
+    if (enHoyoDesdeMs >= 0 && ahora - enHoyoDesdeMs >= AVISO_TRAS_MS && ahora >= proximoAvisoMs) {
+        avisoHoyoHastaMs = ahora + AVISO_DURA_MS
+        proximoAvisoMs = ahora + AVISO_REPITE_MS
+    }
     if (!practicaActiva && ahora - ultimaRevisionGuardadoMs >= 60000) {
         ultimaRevisionGuardadoMs = ahora
         if (sinGuardar) guardarPartida()
@@ -461,6 +535,16 @@ function dibujarPanel(lienzo: Image) {
     if (avisoHastaMs > game.runtime() && !menuAbierto && !practicaActiva) {
         lienzo.fillRect(0, 82, 160, 10, 15)
         lienzo.print(aviso, 2, 83, 5, image.font8)
+    }
+    if (avisoHoyoHastaMs > game.runtime() && !menuAbierto && !practicaActiva) {
+        // Aviso en un hoyo: con material, construir hacia arriba; sin material, primero extraer un bloque.
+        let hayMaterial = quedaMaterial()
+        lienzo.fillRect(0, 10, 160, 20, 15)
+        lienzo.drawLine(0, 29, 159, 29, 6)
+        lienzo.print(hayMaterial ? "Toca A: saltas." : "¿Sin bloque? Mantén A.",
+            2, 11, 5, image.font8)
+        lienzo.print(hayMaterial ? "Luego B: bloque debajo." : "Luego toca A, luego B.",
+            2, 20, 1, image.font8)
     }
 }
 function dibujarMenu(lienzo: Image) {

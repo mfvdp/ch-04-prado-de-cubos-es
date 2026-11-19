@@ -13,6 +13,8 @@ escritorio en la imagen colgada en la pared de la mesa de trabajo.
 - **Cruceta izquierda y derecha:** girar
 - **Mantener B y pulsar arriba o abajo:** mirar hacia arriba o hacia abajo
 - **Mantener A:** extraer el bloque que señala la mira
+- **Pulsación corta de A:** saltar
+- **Pulsación corta de B durante el salto:** poner un bloque bajo tus pies, así sales de cualquier hoyo
 - **Pulsación corta de B:** poner un bloque de tu bolsa
 - **Mantener B y pulsar izquierda o derecha:** elegir otro material
 - **MENU:** mesa de trabajo para fabricar, guardar la partida, volver al inicio y más cosas (B confirma la fila elegida,

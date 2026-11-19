@@ -9,6 +9,11 @@ const JUGADOR_ALTO = 410
 const ALTURA_OJOS = 350
 const NUM_BLOQUES = MUNDO_ANCHO * MUNDO_ANCHO * MUNDO_ALTO
 const TAMANO_PROGRESO = 64 + NUM_BLOQUES / 2 + 2
+// Velocidad inicial de un salto, en 1/256 de bloque por segundo. El jugador sube unos 1,27 bloques: justo lo necesario
+// para saltar sobre un bloque y poner un bloque debajo durante el salto.
+const SALTO_VELOCIDAD = 1140
+// Si el espacio alrededor del jugador tiene menos casillas que este número, cuenta como hoyo.
+const HOYO_LIMITE = 20
 enum Bloque { Aire, Hierba, Tierra, Piedra, Madera, Hojas, Tablas, Cristal, RocaBase }
 let mundo = control.createBuffer(NUM_BLOQUES)
 let bolsa = [0, 0, 24, 16, 8, 0, 12, 0, 0]
@@ -23,6 +28,18 @@ let giro = 0
 let inclinacion = -0.16
 let velocidadCaida = 0
 let enSuelo = true
+// Si el jugador está en el aire por un salto, y a qué altura (en bloques) estaban sus pies al saltar.
+let saltando = false
+let alturaSalto = 0
+// Lo que sobró del último movimiento vertical porque era menos de 1/256 de bloque (en 2000avos). Así no se pierde nada
+// al calcular con números enteros.
+let restoCaida = 0
+// Notas para buscar un hoyo: las casillas ya visitadas y una cola de las casillas que faltan. Se crean una sola vez, no
+// en cada imagen.
+let hoyoVisto = control.createBuffer(MUNDO_ANCHO * MUNDO_ANCHO)
+let hoyoX = control.createBuffer(HOYO_LIMITE)
+let hoyoZ = control.createBuffer(HOYO_LIMITE)
+let hoyoPies = control.createBuffer(HOYO_LIMITE)
 let sinGuardar = false
 let anchoRayo = 4
 let tienePico = false
@@ -122,6 +139,7 @@ function volverAlInicio() {
     escribirBloque(12, 5, 4, Bloque.Aire)
     velocidadCaida = 0
     enSuelo = true
+    saltando = false
 }
 function moverEnEje(dx: number, dz: number) {
     if (!hayChoque(jugadorX + dx, jugadorY, jugadorZ + dz)) {
@@ -140,12 +158,18 @@ function moverEnEje(dx: number, dz: number) {
 function moverJugador(avance: number, duracionMs: number) {
     duracionMs = Math.max(0, Math.min(80, duracionMs))
     if (duracionMs == 0) return
-    enSuelo = hayChoque(jugadorX, jugadorY - 2, jugadorZ)
+    // Quien sube volando no está de pie en el suelo. Así el jugador no sube además un escalón al saltar.
+    enSuelo = velocidadCaida <= 0 && hayChoque(jugadorX, jugadorY - 2, jugadorZ)
     let distancia = Math.idiv(avance * duracionMs * 7, 10)
     moverEnEje(Math.round(Math.sin(giro) * distancia), 0)
     moverEnEje(0, Math.round(Math.cos(giro) * distancia))
+    // Camino según el reloj: la velocidad media antes y después del paso de tiempo, por la duración. Así un salto sube
+    // igual de alto tanto si una imagen dura 16 como 80 milisegundos.
+    let velocidadAntes = velocidadCaida
     velocidadCaida = Math.max(-1100, velocidadCaida - duracionMs * 2)
-    let movimiento = Math.idiv(velocidadCaida * duracionMs, 1000)
+    let recorrido = (velocidadAntes + velocidadCaida) * duracionMs + restoCaida
+    let movimiento = Math.idiv(recorrido, 2000)
+    restoCaida = recorrido - movimiento * 2000
     let trozos = Math.max(1, Math.ceil(Math.abs(movimiento) / 24))
     for (let i = 0; i < trozos; i++) {
         let dy = Math.idiv(movimiento * (i + 1), trozos) - Math.idiv(movimiento * i, trozos)
@@ -159,10 +183,87 @@ function moverJugador(avance: number, duracionMs: number) {
                 jugadorY += sentido
             }
             velocidadCaida = 0
+            restoCaida = 0
             break
         }
     }
     enSuelo = hayChoque(jugadorX, jugadorY - 1, jugadorZ)
+    if (enSuelo && velocidadCaida <= 0) saltando = false
+}
+// Solo se salta desde el suelo, no en el aire.
+function saltar(): boolean {
+    if (!hayChoque(jugadorX, jugadorY - 1, jugadorZ)) return false
+    velocidadCaida = SALTO_VELOCIDAD
+    restoCaida = 0
+    enSuelo = false
+    saltando = true
+    alturaSalto = jugadorY >> 8
+    return true
+}
+// Durante un salto, poner un bloque bajo los pies (construir hacia arriba). Si el material elegido se ha acabado, el
+// jugador toma el siguiente material del que aún le queda.
+function construirDebajo(): boolean {
+    if (!saltando || jugadorY < (alturaSalto + 1) * UNIDAD) return false
+    if (bolsa[materiales[ranuraActual]] == 0) {
+        for (let i = 1; i < materiales.length; i++) {
+            let siguiente = (ranuraActual + i) % materiales.length
+            if (bolsa[materiales[siguiente]] > 0) {
+                ranuraActual = siguiente
+                break
+            }
+        }
+    }
+    return ponerBloque(jugadorX >> 8, alturaSalto, jugadorZ >> 8)
+}
+// ¿Le queda al jugador algún material?
+function quedaMaterial(): boolean {
+    for (let i = 0; i < materiales.length; i++) {
+        if (bolsa[materiales[i]] > 0) return true
+    }
+    return false
+}
+// ¿Adónde llega el jugador desde su casilla a la casilla vecina, solo andando y saltando? La respuesta es la nueva
+// altura de sus pies, o -1 si no se puede.
+function alturaAlcanzada(x: number, z: number, pies: number, vecinoX: number, vecinoZ: number): number {
+    if (vecinoX < 0 || vecinoZ < 0 || vecinoX >= MUNDO_ANCHO || vecinoZ >= MUNDO_ANCHO) return -1
+    if (bloqueEn(vecinoX, pies, vecinoZ) == Bloque.Aire && bloqueEn(vecinoX, pies + 1, vecinoZ) == Bloque.Aire) {
+        let y = pies
+        while (y > 1 && bloqueEn(vecinoX, y - 1, vecinoZ) == Bloque.Aire) y--
+        return y
+    }
+    if (bloqueEn(vecinoX, pies + 1, vecinoZ) == Bloque.Aire && bloqueEn(vecinoX, pies + 2, vecinoZ) == Bloque.Aire &&
+        bloqueEn(x, pies + 2, z) == Bloque.Aire) return pies + 1
+    return -1
+}
+// Cuenta las casillas a las que llega el jugador andando y saltando, pero solo hasta el límite de un hoyo. Menos
+// casillas significa: está en un hoyo y solo sale construyendo hacia arriba o cavando.
+function contarEspacio(): number {
+    hoyoVisto.fill(0)
+    hoyoX[0] = jugadorX >> 8
+    hoyoZ[0] = jugadorZ >> 8
+    hoyoPies[0] = jugadorY >> 8
+    hoyoVisto[hoyoX[0] + MUNDO_ANCHO * hoyoZ[0]] = 1
+    let cantidad = 1
+    let siguiente = 0
+    while (siguiente < cantidad) {
+        let x = hoyoX[siguiente]
+        let z = hoyoZ[siguiente]
+        let pies = hoyoPies[siguiente]
+        siguiente++
+        for (let lado = 0; lado < 4; lado++) {
+            let vecinoX = x + (lado == 0 ? 1 : lado == 1 ? -1 : 0)
+            let vecinoZ = z + (lado == 2 ? 1 : lado == 3 ? -1 : 0)
+            let alcanzada = alturaAlcanzada(x, z, pies, vecinoX, vecinoZ)
+            if (alcanzada < 0 || hoyoVisto[vecinoX + MUNDO_ANCHO * vecinoZ] == 1) continue
+            if (cantidad >= HOYO_LIMITE) return HOYO_LIMITE
+            hoyoVisto[vecinoX + MUNDO_ANCHO * vecinoZ] = 1
+            hoyoX[cantidad] = vecinoX
+            hoyoZ[cantidad] = vecinoZ
+            hoyoPies[cantidad] = alcanzada
+            cantidad++
+        }
+    }
+    return cantidad
 }
 function extraerBloque(x: number, y: number, z: number): boolean {
     let tipoBloque = bloqueEn(x, y, z)
@@ -262,6 +363,7 @@ function decodificarProgreso(datos: Buffer): boolean {
         bolsa[i] = datos.getNumber(NumberFormat.UInt16LE, 18 + i * 2)
     }
     velocidadCaida = 0
+    saltando = false
     sinGuardar = false
     if (hayChoque(jugadorX, jugadorY, jugadorZ)) volverAlInicio()
     else enSuelo = hayChoque(jugadorX, jugadorY - 1, jugadorZ)
